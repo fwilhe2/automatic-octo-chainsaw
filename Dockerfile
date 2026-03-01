@@ -5,7 +5,6 @@ RUN apt-get update && apt-get install -y \
     build-essential bison gawk texinfo wget python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Use ENV so these are available in all RUN instructions
 ENV LFS=/mnt/lfs \
     LFS_TGT=x86_64-lfs-linux-gnu \
     PATH=/mnt/lfs/tools/bin:$PATH \
@@ -13,32 +12,35 @@ ENV LFS=/mnt/lfs \
 
 WORKDIR /sources
 
-# Define versions
+# Updated Versions including the "Trinity"
 ENV BINUTILS_VER=2.41 \
     GCC_VER=13.2.0 \
     LINUX_VER=6.4.12 \
     GLIBC_VER=2.38 \
     BASH_VER=5.2.15 \
-    COREUTILS_VER=9.3
+    COREUTILS_VER=9.3 \
+    GMP_VER=6.3.0 \
+    MPFR_VER=4.2.1 \
+    MPC_VER=1.3.1
 
-# Download sources
+# Download everything (including the new math libraries)
 RUN wget https://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz \
     https://ftp.gnu.org/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz \
     https://www.kernel.org/pub/linux/kernel/v6.x/linux-${LINUX_VER}.tar.xz \
     https://ftp.gnu.org/gnu/glibc/glibc-${GLIBC_VER}.tar.xz \
     https://ftp.gnu.org/gnu/bash/bash-${BASH_VER}.tar.gz \
-    https://ftp.gnu.org/gnu/coreutils/coreutils-${COREUTILS_VER}.tar.xz
+    https://ftp.gnu.org/gnu/coreutils/coreutils-${COREUTILS_VER}.tar.xz \
+    https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VER}.tar.xz \
+    https://ftp.gnu.org/gnu/mpfr/mpfr-${MPFR_VER}.tar.xz \
+    https://ftp.gnu.org/gnu/mpc/mpc-${MPC_VER}.tar.gz
 
 # --- STAGE 2: Building the Toolchain ---
-# FIX: Added usr/include to the initial directory creation
 RUN mkdir -pv $LFS/bin $LFS/lib $LFS/sbin $LFS/tools \
     && mkdir -pv $LFS/usr/bin $LFS/usr/lib $LFS/usr/sbin $LFS/usr/include
 
-# 1. Install Linux Headers (Added mkdir -p safety check)
+# 1. Install Linux Headers
 RUN tar -xf linux-${LINUX_VER}.tar.xz && cd linux-${LINUX_VER} && \
     make mrproper && make headers && \
-    find usr/include -type f ! -name '*.h' -delete && \
-    mkdir -pv $LFS/usr/include && \
     cp -rv usr/include/* $LFS/usr/include
 
 # 2. Build Binutils (Pass 1)
@@ -47,8 +49,13 @@ RUN tar -xf binutils-${BINUTILS_VER}.tar.xz && mkdir -v binutils-build && cd bin
     --with-sysroot=$LFS --target=$LFS_TGT --disable-nls --enable-gprofng=no --disable-werror && \
     make && make install
 
-# 3. Build GCC (Pass 1)
+# 3. Build GCC (Pass 1) - NOW WITH DEPENDENCIES
 RUN tar -xf gcc-${GCC_VER}.tar.xz && cd gcc-${GCC_VER} && \
+    # Extract dependencies into the GCC source tree
+    tar -xf ../gmp-${GMP_VER}.tar.xz && mv -v gmp-${GMP_VER} gmp && \
+    tar -xf ../mpfr-${MPFR_VER}.tar.xz && mv -v mpfr-${MPFR_VER} mpfr && \
+    tar -xf ../mpc-${MPC_VER}.tar.gz && mv -v mpc-${MPC_VER} mpc && \
+    # Build
     mkdir -v build && cd build && \
     ../configure --target=$LFS_TGT --prefix=$LFS/tools --with-glibc-version=2.38 \
     --with-sysroot=$LFS --with-newlib --without-headers --enable-default-pie \
