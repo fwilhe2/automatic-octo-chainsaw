@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - run: |
+          sudo fallocate -l 20G /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
       - name: Build image
         run: DOCKER_BUILDKIT=1 docker build . --file Dockerfile --tag $IMAGE_NAME
 
